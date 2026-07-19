@@ -40,7 +40,7 @@ jobs:
           go-version: "1.26.5"
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: 2.12.2
 
   integration:
     runs-on: ubuntu-latest
@@ -77,7 +77,16 @@ jobs:
             -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
             -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
             confluentinc/cp-kafka:8.2.2
-          sleep 10
+          
+          # Wait for Kafka to be ready
+          for i in {1..30}; do
+            if docker exec kafka kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1; then
+              echo "Kafka is ready"
+              break
+            fi
+            echo "Waiting for Kafka... ($i/30)"
+            sleep 1
+          done
 
       - name: Integration tests
         env:
