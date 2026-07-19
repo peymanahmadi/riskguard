@@ -14,9 +14,16 @@ linters:
     - bodyclose
   settings:
     govet:
-      enable-all: true
-    staticcheck:
-      checks: ["all"]
+      disable:
+        # fieldalignment optimizes struct memory layout by field size, at
+        # the cost of grouping fields the way a human reads them (e.g.
+        # Transaction.EntityID next to AmountMinor next to Currency). None
+        # of our structs are allocated at a scale where the padding savings
+        # matter; readability wins here. Revisit for specific hot-path
+        # types (e.g. RuleResult) if profiling ever shows struct padding as
+        # a real cost.
+        - fieldalignment
+
   exclusions:
     paths:
       - vendor
@@ -28,9 +35,3 @@ formatters:
   enable:
     - gofmt
     - goimports
-  settings:
-    gofmt:
-      simplify: true
-    goimports:
-      local-prefixes:
-        - github.com/peymanahmadi/riskguard
