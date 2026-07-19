@@ -40,7 +40,7 @@ jobs:
           go-version: "1.26.5"
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: 2.12.2
+          version: v2.12.2
 
   integration:
     runs-on: ubuntu-latest
@@ -76,17 +76,46 @@ jobs:
             -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
             -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
             -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+            -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=true \
             confluentinc/cp-kafka:8.2.2
           
           # Wait for Kafka to be ready
+          echo "Waiting for Kafka to start..."
           for i in {1..30}; do
             if docker exec kafka kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1; then
-              echo "Kafka is ready"
+              echo "Kafka is ready!"
               break
             fi
             echo "Waiting for Kafka... ($i/30)"
-            sleep 1
+            sleep 2
           done
+          
+          # Give Kafka a moment to fully initialize
+          sleep 5
+
+      - name: Create Kafka topics
+        run: |
+          echo "Creating Kafka topics..."
+          
+          # Create transactions topic
+          docker exec kafka kafka-topics.sh --create \
+            --bootstrap-server localhost:9092 \
+            --topic transactions \
+            --partitions 1 \
+            --replication-factor 1 \
+            --if-not-exists
+          
+          # Create risk-decisions topic
+          docker exec kafka kafka-topics.sh --create \
+            --bootstrap-server localhost:9092 \
+            --topic risk-decisions \
+            --partitions 1 \
+            --replication-factor 1 \
+            --if-not-exists
+          
+          # List topics to verify
+          echo "Available topics:"
+          docker exec kafka kafka-topics.sh --list --bootstrap-server localhost:9092
 
       - name: Integration tests
         env:
