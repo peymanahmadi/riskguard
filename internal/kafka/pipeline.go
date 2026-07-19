@@ -58,8 +58,16 @@ func NewPipeline(cfg Config, engine *riskguard.Engine, history riskguard.History
 // Run blocks, consuming and processing messages until ctx is cancelled or an
 // unrecoverable read error occurs.
 func (p *Pipeline) Run(ctx context.Context) error {
-	defer p.reader.Close()
-	defer p.writer.Close()
+	defer func() {
+		if err := p.reader.Close(); err != nil {
+			p.logger.Error("failed to close kafka reader", "error", err)
+		}
+	}()
+	defer func() {
+		if err := p.writer.Close(); err != nil {
+			p.logger.Error("failed to close kafka writer", "error", err)
+		}
+	}()
 
 	for {
 		msg, err := p.reader.FetchMessage(ctx)
@@ -101,8 +109,8 @@ func (p *Pipeline) handle(ctx context.Context, msg kafka.Message) error {
 	}
 
 	if p.history != nil {
-		if err := p.history.SaveTransaction(ctx, tx); err != nil {
-			p.logger.Error("failed to persist transaction", "tx_id", tx.ID, "error", err)
+		if saveErr := p.history.SaveTransaction(ctx, tx); saveErr != nil {
+			p.logger.Error("failed to persist transaction", "tx_id", tx.ID, "error", saveErr)
 		}
 	}
 
@@ -121,13 +129,20 @@ func (p *Pipeline) handle(ctx context.Context, msg kafka.Message) error {
 // PublishTransaction is a small helper for producers (e.g. the demo HTTP
 // server, or a load-test script) to publish a TransactionEvent onto the
 // input topic instead of calling the engine synchronously.
-func PublishTransaction(ctx context.Context, brokers []string, topic string, event TransactionEvent) error {
+func PublishTransaction(ctx context.Context, brokers []string, topic string, event TransactionEvent) (err error) {
 	w := &kafka.Writer{Addr: kafka.TCP(brokers...), Topic: topic, Balancer: &kafka.Hash{}}
-	defer w.Close()
+	defer func() {
+		// kafka-go's Writer.Close flushes any buffered messages, so a close
+		// error here can mean a message was never actually sent even though
+		// WriteMessages returned nil. Surface it rather than discard it.
+		if closeErr := w.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close writer: %w", closeErr)
+		}
+	}()
 
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("marshal transaction event: %w", err)
+	payload, marshalErr := json.Marshal(event)
+	if marshalErr != nil {
+		return fmt.Errorf("marshal transaction event: %w", marshalErr)
 	}
 	return w.WriteMessages(ctx, kafka.Message{Key: []byte(event.EntityID), Value: payload})
 }
