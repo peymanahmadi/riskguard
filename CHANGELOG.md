@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.0.0] - 2026-07-22
+
+### Changed
+- First stable release. No functional changes from v0.1.0, retagged as
+  v1.0.0 after fixing a stale module-proxy cache and per pkg.go.dev's
+  recommendation to tag a stable major version.
+
 ## [v0.1.0] - 2026-07-22
 
 ### Added
